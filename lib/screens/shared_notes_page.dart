@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../utils/file_downloader.dart';
 
 class SharedNotesPage extends StatefulWidget {
   const SharedNotesPage({super.key});
@@ -12,7 +13,10 @@ class SharedNotesPage extends StatefulWidget {
 class _SharedNotesPageState extends State<SharedNotesPage> {
   final _apiService = ApiService();
   List<Map<String, dynamic>> notes = [];
+  List<Map<String, dynamic>> filteredNotes = [];
   bool isLoading = true;
+  String selectedClass = 'All Classes';
+  String selectedSemester = 'All Semesters';
 
   @override
   void initState() {
@@ -23,9 +27,10 @@ class _SharedNotesPageState extends State<SharedNotesPage> {
   Future<void> _loadNotes() async {
     setState(() => isLoading = true);
     try {
-      final loadedNotes = await _apiService.getNotes();
+      final loadedNotes = await _apiService.getSharedNotes();
       setState(() {
         notes = loadedNotes;
+        _applyFilters();
         isLoading = false;
       });
     } catch (e) {
@@ -33,9 +38,7 @@ class _SharedNotesPageState extends State<SharedNotesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Notlar yüklenirken hata: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -43,37 +46,77 @@ class _SharedNotesPageState extends State<SharedNotesPage> {
     }
   }
 
+  void _applyFilters() {
+    filteredNotes = notes.where((note) {
+      if (selectedClass != 'All Classes') {
+        final noteClass = note['classLevel']?.toString() ?? note['grade']?.toString() ?? '';
+        if (noteClass != selectedClass) return false;
+      }
+      if (selectedSemester != 'All Semesters') {
+        final noteSemester = note['semester']?.toString() ?? '';
+        final semesterMap = {'1': 'Fall', '2': 'Spring'};
+        final displaySemester = semesterMap[noteSemester] ?? noteSemester;
+        if (displaySemester != selectedSemester) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<String> _getUniqueClasses() {
+    final classes = <String>{};
+    for (var note in notes) {
+      final grade = note['classLevel']?.toString() ?? note['grade']?.toString() ?? '';
+      if (grade.isNotEmpty) classes.add(grade);
+    }
+    return ['All Classes', ...classes.toList()..sort()];
+  }
+
+  List<String> _getUniqueSemesters() {
+    return ['All Semesters', 'Fall', 'Spring'];
+  }
+
   Future<void> _downloadNote(int noteId) async {
     try {
-      // Not detayını al
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Downloading...')),
+        );
+      }
+
       final note = await _apiService.getNote(noteId);
       final files = note['files'] as List<dynamic>?;
 
       if (files == null || files.isEmpty) {
         if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Bu not için dosya bulunamadı')),
+            const SnackBar(content: Text('No file found'), backgroundColor: Colors.orange),
           );
         }
         return;
       }
 
-      // İlk dosyayı indir
+      final fileName = files[0]['fileName'] ?? files[0]['originalName'] ?? 'note.pdf';
       final fileId = files[0]['id'];
-      final bytes = await _apiService.downloadFile(fileId); // ✔ DÜZELTİLDİ
+      final bytes = await _apiService.downloadFile(fileId);
+      
+      await FileDownloader.downloadFile(bytes, fileName);
 
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Dosya indirildi (${bytes.length} bytes)')),
+          SnackBar(
+            content: Text('Downloaded: $fileName'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'İndirme hatası: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -93,146 +136,249 @@ class _SharedNotesPageState extends State<SharedNotesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paylaşılan Notlar'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadNotes,
-            tooltip: 'Yenile',
-          ),
-        ],
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : notes.isEmpty
-              ? Center(
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFF9333EA)],
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Shared Notes',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      onPressed: _loadNotes,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            if (isLoading)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (notes.isEmpty)
+              Expanded(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.description_outlined, size: 64, color: Color(0xFF9CA3AF)),
-                      const SizedBox(height: 12),
-                      const Text('Henüz not bulunmuyor', style: TextStyle(fontSize: 18, color: Color(0xFF6B7280))),
+                      const Icon(Icons.description_outlined, size: 64, color: Color(0xFF7C3AED)),
+                      const SizedBox(height: 16),
+                      const Text('No notes yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.pushNamed(context, '/add-notes'),
-                        icon: const Icon(Icons.add),
-                        label: const Text('İlk Notunu Ekle'),
-                      ),
+                      Text('Be the first to share!', style: TextStyle(color: Colors.grey[600])),
                     ],
                   ),
-                )
-              : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.78,
-                    ),
-                    itemCount: notes.length,
-                    itemBuilder: (_, i) => _NoteCard(
-                      note: notes[i],
-                      onDownload: () => _downloadNote(notes[i]['id']),
-                    ),
-                  ),
                 ),
-    );
-  }
-}
+              )
+            else
+              Expanded(
+                child: Column(
+                  children: [
+                    // Filters
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedClass,
+                              decoration: const InputDecoration(
+                                labelText: 'Class',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              items: _getUniqueClasses().map((c) {
+                                return DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis));
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedClass = value!;
+                                  _applyFilters();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedSemester,
+                              decoration: const InputDecoration(
+                                labelText: 'Semester',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              items: _getUniqueSemesters().map((s) {
+                                return DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis));
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedSemester = value!;
+                                  _applyFilters();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
-class _NoteCard extends StatelessWidget {
-  final Map<String, dynamic> note;
-  final VoidCallback onDownload;
-
-  const _NoteCard({required this.note, required this.onDownload});
-
-  String _formatDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return DateFormat.yMd().format(date);
-    } catch (e) {
-      return dateStr;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateStr = _formatDate(note['createdAt'] ?? DateTime.now().toIso8601String());
-    final fileCount = note['fileCount'] ?? 0;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const CircleAvatar(
-                  backgroundColor: Color(0xFFEDE9FE),
-                  child: Icon(Icons.menu_book_rounded, color: Color(0xFF7C3AED)),
+                    // Notes Grid
+                    Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: filteredNotes.length,
+                        itemBuilder: (context, index) {
+                          final note = filteredNotes[index];
+                          final user = note['user'] as Map<String, dynamic>?;
+                          final userName = user?['name'] ?? 'Unknown';
+                          
+                          return TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            duration: Duration(milliseconds: 400 + (index * 100)),
+                            curve: Curves.easeOut,
+                            builder: (context, value, child) {
+                              return Transform.scale(
+                                scale: value,
+                                child: Opacity(
+                                  opacity: value,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                                      onTap: () => _downloadNote(note['id']),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEDE9FE),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.description, color: Color(0xFF7C3AED), size: 28),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              note['title'] ?? 'Untitled',
+                                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              note['courseCode'] ?? '',
+                                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const Spacer(),
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.person, size: 12, color: Color(0xFF7C3AED)),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    userName,
+                                                    style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _formatDate(note['createdAt'] ?? ''),
+                                              style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF)),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Download Button
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [Color(0xFF7C3AED), Color(0xFF9333EA)],
+                                      ),
+                                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                                        onTap: () => _downloadNote(note['id']),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 10),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.download, color: Colors.white, size: 18),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Download',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                if (fileCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEDE9FE),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$fileCount dosya',
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF7C3AED)),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              note['title'] ?? 'Başlıksız',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              note['courseCode'] ?? '',
-              style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Text(
-                note['summary'] ?? '',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12),
               ),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 14, color: Color(0xFF6B7280)),
-                const SizedBox(width: 4),
-                Text(
-                  dateStr,
-                  style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: onDownload,
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text('İndir', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            )
           ],
         ),
       ),

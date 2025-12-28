@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:uninotes_mobile/screens/home_page.dart';
-import 'package:uninotes_mobile/screens/about_page.dart';
-import 'package:uninotes_mobile/screens/shared_notes_page.dart';
-import 'package:uninotes_mobile/screens/add_notes_page.dart';
-import 'package:uninotes_mobile/screens/profile_page.dart';
+import 'package:provider/provider.dart';
+import 'package:uninotes_mobile/providers/auth_provider.dart';
+import 'package:uninotes_mobile/screens/landing_page.dart';
+import 'package:uninotes_mobile/screens/main_scaffold.dart';
 import 'package:uninotes_mobile/screens/register_page.dart';
 import 'package:uninotes_mobile/screens/login_page.dart';
 import 'package:uninotes_mobile/theme.dart';
@@ -14,11 +13,11 @@ import 'package:intl/intl.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // TR locale date formatting
-  await initializeDateFormatting('tr_TR', null);
-  Intl.defaultLocale = 'tr_TR';
+  // EN locale date formatting
+  await initializeDateFormatting('en_US', null);
+  Intl.defaultLocale = 'en_US';
 
-  runApp(const UniNotesApp()); // ← ARTIK BU ÇALIŞACAK
+  runApp(const UniNotesApp());
 }
 
 class UniNotesApp extends StatelessWidget {
@@ -26,20 +25,20 @@ class UniNotesApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'UniNotes',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(), // ← Senin tema fonksiyonun
-      initialRoute: '/',
-      routes: {
-        '/': (_) => const HomePage(),
-        '/login': (_) => const LoginPage(),
-        '/register': (_) => const RegisterPage(),
-        '/about': (_) => const AboutPage(),
-        '/shared-notes': (_) => const SharedNotesPage(),
-        '/add-notes': (_) => const AddNotesPage(),
-        '/profile': (_) => const ProfilePage(),
-      },
+    return ChangeNotifierProvider(
+      create: (_) => AuthProvider(),
+      child: MaterialApp(
+        title: 'UniNotes - Share & Learn Together',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(),
+        initialRoute: '/',
+        routes: {
+          '/': (_) => const LandingPage(),
+          '/login': (_) => const LoginPage(),
+          '/register': (_) => const RegisterPage(),
+          '/home': (_) => const MainScaffold(),
+        },
+      ),
     );
   }
 }

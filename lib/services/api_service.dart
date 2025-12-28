@@ -123,11 +123,63 @@ class ApiService {
     final response = await http.get(url, headers: await _getHeaders());
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.cast<Map<String, dynamic>>();
+      try {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      } catch (e) {
+        throw Exception('Yanıt işlenemedi: ${e.toString()}');
+      }
     } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Notlar alınamadı');
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Notlar alınamadı');
+      } catch (e) {
+        throw Exception('Notlar alınamadı (HTTP ${response.statusCode})');
+      }
+    }
+  }
+
+  // Get shared notes (public notes shared by all users)
+  Future<List<Map<String, dynamic>>> getSharedNotes() async {
+    final url = Uri.parse('$baseUrl/notes/shared');
+    final response = await http.get(url, headers: await _getHeaders());
+
+    if (response.statusCode == 200) {
+      try {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      } catch (e) {
+        throw Exception('Yanıt işlenemedi: ${e.toString()}');
+      }
+    } else {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Paylaşılan notlar yüklenemedi');
+      } catch (e) {
+        throw Exception('Paylaşılan notlar yüklenemedi (HTTP ${response.statusCode})');
+      }
+    }
+  }
+
+  // Get current user's notes only
+  Future<List<Map<String, dynamic>>> getMyNotes() async {
+    final url = Uri.parse('$baseUrl/notes/my');
+    final response = await http.get(url, headers: await _getHeaders());
+
+    if (response.statusCode == 200) {
+      try {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      } catch (e) {
+        throw Exception('Yanıt işlenemedi: ${e.toString()}');
+      }
+    } else {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Notlarınız yüklenemedi');
+      } catch (e) {
+        throw Exception('Notlarınız yüklenemedi (HTTP ${response.statusCode})');
+      }
     }
   }
 
@@ -136,10 +188,18 @@ class ApiService {
     final response = await http.get(url, headers: await _getHeaders());
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      try {
+        return jsonDecode(response.body);
+      } catch (e) {
+        throw Exception('Yanıt işlenemedi: ${e.toString()}');
+      }
     } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Not bulunamadı');
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Not bulunamadı');
+      } catch (e) {
+        throw Exception('Not bulunamadı (HTTP ${response.statusCode})');
+      }
     }
   }
 
@@ -147,6 +207,8 @@ class ApiService {
     required String title,
     required String courseCode,
     required String summary,
+    required int classLevel,
+    required int semester,
   }) async {
     final url = Uri.parse('$baseUrl/notes');
     final response = await http.post(
@@ -156,14 +218,34 @@ class ApiService {
         'title': title,
         'courseCode': courseCode,
         'summary': summary,
+        'classLevel': classLevel,
+        'semester': semester,
+        'isShared': true,
       }),
     );
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
+    if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Not oluşturulamadı');
+      throw Exception(error['message'] ?? 'Could not create note');
+    }
+  }
+
+  Future<void> deleteNote(int noteId) async {
+    final url = Uri.parse('$baseUrl/notes/$noteId');
+    final response = await http.delete(
+      url,
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Could not delete note');
+      } catch (e) {
+        throw Exception('Could not delete note (HTTP ${response.statusCode})');
+      }
     }
   }
 
@@ -248,10 +330,48 @@ class ApiService {
     final response = await http.get(url, headers: await _getHeaders());
 
     if (response.statusCode == 200) {
+      // Check if response has content
+      if (response.bodyBytes.isEmpty) {
+        throw Exception('Dosya içeriği boş');
+      }
       return response.bodyBytes;
     } else {
+      // Try to parse error message, but handle JSON parsing errors
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Dosya indirilemedi');
+      } catch (e) {
+        // If JSON parsing fails, throw a generic error with status code
+        throw Exception('Dosya indirilemedi (HTTP ${response.statusCode})');
+      }
+    }
+  }
+
+  // ---------------------------------------------------
+  // 📌 CONTACT US
+  // ---------------------------------------------------
+  Future<void> sendContactMessage({
+    required String name,
+    required String email,
+    required String subject,
+    required String message,
+  }) async {
+    final url = Uri.parse('$baseUrl/contact/send');
+    final response = await http.post(
+      url,
+      headers: await _getHeaders(includeAuth: false),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'subject': subject,
+        'message': message,
+      }),
+    );
+
+    if (response.statusCode != 200) {
       final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Dosya indirilemedi');
+      throw Exception(error['message'] ?? 'Message could not be sent');
     }
   }
 }
+
