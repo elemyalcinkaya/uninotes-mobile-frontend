@@ -23,6 +23,11 @@ class _AddNotesPageState extends State<AddNotesPage> {
   String? selectedClass;
   String? selectedSemester;
   
+  // Course selection state
+  List<Map<String, dynamic>> availableCourses = [];
+  String? selectedCourseCode;
+  bool loadingCourses = false;
+  
   final List<String> classes = ['1', '2', '3', '4'];
   final List<String> semesters = ['Fall', 'Spring'];
 
@@ -32,6 +37,32 @@ class _AddNotesPageState extends State<AddNotesPage> {
     courseCodeController.dispose();
     descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCourses() async {
+    if (selectedClass == null || selectedSemester == null) {
+      setState(() => availableCourses = []);
+      return;
+    }
+
+    setState(() => loadingCourses = true);
+    try {
+      final courses = await _apiService.getCoursesByClassAndSemester(
+        int.parse(selectedClass!),
+        selectedSemester == 'Fall' ? 1 : 2,
+      );
+      setState(() {
+        availableCourses = courses;
+        loadingCourses = false;
+      });
+    } catch (e) {
+      setState(() => loadingCourses = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load courses: $e')),
+        );
+      }
+    }
   }
 
   Future<void> pickFile() async {
@@ -277,15 +308,6 @@ class _AddNotesPageState extends State<AddNotesPage> {
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: courseCodeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Course Code',
-                          hintText: 'e.g., CS 101',
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      const SizedBox(height: 12),
                       
                       // Class Dropdown
                       DropdownButtonFormField<String>(
@@ -303,6 +325,9 @@ class _AddNotesPageState extends State<AddNotesPage> {
                         onChanged: (String? newValue) {
                           setState(() {
                             selectedClass = newValue;
+                            selectedCourseCode = null;
+                            courseCodeController.clear();
+                            _loadCourses();
                           });
                         },
                       ),
@@ -324,9 +349,52 @@ class _AddNotesPageState extends State<AddNotesPage> {
                         onChanged: (String? newValue) {
                           setState(() {
                             selectedSemester = newValue;
+                            selectedCourseCode = null;
+                            courseCodeController.clear();
+                            _loadCourses();
                           });
                         },
                       ),
+                      const SizedBox(height: 12),
+                      
+                      // Course Code Dropdown (Dynamic)
+                      if (selectedClass != null && selectedSemester != null)
+                        loadingCourses
+                            ? const Center(child: CircularProgressIndicator())
+                            : DropdownButtonFormField<String>(
+                                value: selectedCourseCode,
+                                decoration: const InputDecoration(
+                                  labelText: 'Course Code',
+                                  hintText: 'Select course',
+                                ),
+                                items: availableCourses.map((course) {
+                                  final courseCode = course['courseCode'] ?? '';
+                                  final courseName = course['courseName'];
+                                  final displayText = courseName != null && courseName.toString().isNotEmpty
+                                      ? '$courseCode - $courseName'
+                                      : courseCode;
+                                  
+                                  return DropdownMenuItem<String>(
+                                    value: course['courseCode'],
+                                    child: Text(displayText),
+                                  );
+                                }).toList(),
+                                onChanged: (String? value) {
+                                  setState(() {
+                                    selectedCourseCode = value;
+                                    courseCodeController.text = value ?? '';
+                                  });
+                                },
+                              )
+                      else
+                        TextField(
+                          controller: courseCodeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Course Code',
+                            hintText: 'Select class and semester first',
+                          ),
+                          enabled: false,
+                        ),
                       const SizedBox(height: 12),
                       
                       TextField(

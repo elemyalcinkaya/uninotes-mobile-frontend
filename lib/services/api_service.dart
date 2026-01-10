@@ -373,5 +373,116 @@ class ApiService {
       throw Exception(error['message'] ?? 'Message could not be sent');
     }
   }
-}
 
+  // ---------------------------------------------------
+  // 📌 DOSYA BİLGİSİ ALMA (Document Type için)
+  // ---------------------------------------------------
+  Future<List<Map<String, dynamic>>> getFiles({int? noteId}) async {
+    final url = noteId != null
+        ? Uri.parse('$baseUrl/files?noteId=$noteId')
+        : Uri.parse('$baseUrl/files');
+
+    final response = await http.get(url, headers: await _getHeaders());
+
+    if (response.statusCode == 200) {
+      if (response.body.isEmpty || response.body.trim().isEmpty) {
+        return [];
+      }
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded.cast<Map<String, dynamic>>();
+        }
+        return [];
+      } catch (e) {
+        throw Exception('Dosya bilgisi alınamadı: ${e.toString()}');
+      }
+    } else {
+      throw Exception('Dosya bilgisi alınamadı: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------------------------------
+  // 📌 DERSLER (Sınıf ve Döneme Göre)
+  // ---------------------------------------------------
+  Future<List<Map<String, dynamic>>> getCoursesByClassAndSemester(
+      int classLevel, int semester) async {
+    final url = Uri.parse(
+        '$baseUrl/courses/ByClassLevelAndSemester/$classLevel/$semester');
+
+    final response = await http.get(url, headers: await _getHeaders());
+
+    if (response.statusCode == 200) {
+      if (response.body.isEmpty || response.body.trim().isEmpty) {
+        return [];
+      }
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded.cast<Map<String, dynamic>>();
+        }
+        return [];
+      } catch (e) {
+        throw Exception('Dersler alınamadı: ${e.toString()}');
+      }
+    } else {
+      throw Exception('Dersler alınamadı: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------------------------------
+  // 📌 BİLDİRİM SEBEPLERİ
+  // ---------------------------------------------------
+  Future<List<Map<String, dynamic>>> getReportReasons() async {
+    final url = Uri.parse('$baseUrl/reportreasons');
+
+    final response = await http.get(url, headers: await _getHeaders());
+
+    if (response.statusCode == 200) {
+      if (response.body.isEmpty || response.body.trim().isEmpty) {
+        return [];
+      }
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded.cast<Map<String, dynamic>>();
+        }
+        return [];
+      } catch (e) {
+        throw Exception('Bildirim sebepleri alınamadı: ${e.toString()}');
+      }
+    } else {
+      throw Exception('Bildirim sebepleri alınamadı: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------------------------------
+  // 📌 BİLDİRİM GÖNDER
+  // ---------------------------------------------------
+  Future<void> submitReport(int noteId, int reportReasonId) async {
+    final url = Uri.parse('$baseUrl/reports');
+
+    final response = await http.post(
+      url,
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'noteId': noteId,
+        'reportReasonId': reportReasonId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      try {
+        if (response.body.isNotEmpty) {
+          final error = jsonDecode(response.body);
+          throw Exception(error['message'] ?? 'Bildirim gönderilemedi');
+        } else {
+          throw Exception('Bildirim gönderilemedi: ${response.statusCode}');
+        }
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Bildirim gönderilemedi');
+      }
+    }
+  }
+}

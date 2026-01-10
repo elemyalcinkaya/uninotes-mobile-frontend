@@ -143,6 +143,7 @@ class _LoginPageState extends State<LoginPage> {
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
                       obscureText: true,
+                      onFieldSubmitted: (_) => _login(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your password';

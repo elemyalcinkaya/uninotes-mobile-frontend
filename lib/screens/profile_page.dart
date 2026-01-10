@@ -37,8 +37,21 @@ class _ProfilePageState extends State<ProfilePage> {
       }
 
       final notes = await _apiService.getMyNotes();
+      
+      // Fetch detailed info for each note to get files
+      final notesWithFiles = <Map<String, dynamic>>[];
+      for (var note in notes) {
+        try {
+          final detailedNote = await _apiService.getNote(note['id']);
+          notesWithFiles.add(detailedNote);
+        } catch (e) {
+          // If we can't get details, use the basic note
+          notesWithFiles.add(note);
+        }
+      }
+      
       setState(() {
-        uploadedNotes = notes;
+        uploadedNotes = notesWithFiles;
         isLoading = false;
       });
     } catch (e) {
@@ -65,6 +78,72 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       return dateStr;
     }
+  }
+
+  Widget _getDocumentIcon(Map<String, dynamic> note) {
+    // Check if note has files array with file info
+    final files = note['files'] as List<dynamic>?;
+    if (files != null && files.isNotEmpty) {
+      final fileName = (files[0]['fileName'] ?? files[0]['originalName'] ?? '').toString();
+      if (fileName.isNotEmpty) {
+        final extension = fileName.split('.').last.toLowerCase();
+        
+        switch (extension) {
+          case 'pdf':
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'PDF',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+          case 'doc':
+          case 'docx':
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade100,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'DOCX',
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+          case 'jpg':
+          case 'jpeg':
+          case 'png':
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'IMG',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+        }
+      }
+    }
+    return const SizedBox.shrink(); // Don't show anything if no file
   }
 
   Future<void> _deleteNote(int noteId) async {
@@ -374,12 +453,18 @@ class _ProfilePageState extends State<ProfilePage> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 4),
-                                            Text(
-                                              _formatDate(note['createdAt'] ?? ''),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF9CA3AF),
-                                              ),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  _formatDate(note['createdAt'] ?? ''),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Color(0xFF9CA3AF),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                _getDocumentIcon(note),
+                                              ],
                                             ),
                                           ],
                                         ),
